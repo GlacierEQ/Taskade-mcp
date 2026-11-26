@@ -1,7 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import fetch from 'node-fetch';
 
+import { version } from '../package.json';
 import { setupTools } from './tools.generated';
+import { setupToolsV2 } from './tools.v2.generated';
+
+// Every API request names this package and its version. With this header, Taskade can measure
+// the usage of the package and debug its requests. The build inlines `version` from
+// package.json into bin/cli.mjs.
+const USER_AGENT = `taskade-mcp-server/${version}`;
 
 type TaskadeServerOpts = {
   accessToken: string;
@@ -11,14 +18,8 @@ export class TaskadeMCPServer extends McpServer {
   readonly config: TaskadeServerOpts;
 
   constructor(opts: TaskadeServerOpts) {
-    super({
-      name: 'taskade',
-      version: '0.0.1',
-      capabilities: {
-        resources: {},
-        tools: {},
-      },
-    });
+    // McpServer advertises the tools capability itself. The server has no resources to advertise.
+    super({ name: 'taskade', version });
 
     this.config = opts;
 
@@ -27,6 +28,7 @@ export class TaskadeMCPServer extends McpServer {
       fetch,
       headers: {
         Authorization: `Bearer ${this.config.accessToken}`,
+        'User-Agent': USER_AGENT,
       },
       normalizeResponse: {
         folderProjectsGet: (response) => {
@@ -120,6 +122,61 @@ export class TaskadeMCPServer extends McpServer {
             ],
           };
         },
+        taskCreate: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to new tasks is in the format of: https://www.taskade.com/d/{projectId}#node-{taskId}. Share the links with the user.',
+              },
+            ],
+          };
+        },
+        taskGet: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to this task is: https://www.taskade.com/d/{projectId}#node-{taskId}. Link it in your response.',
+              },
+            ],
+          };
+        },
+        projectTasksGet: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to tasks is in the format of: https://www.taskade.com/d/{projectId}#node-{taskId}. You should link all tasks in the response to the user.',
+              },
+            ],
+          };
+        },
+        workspacesGet: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to workspaces is in the format of: https://www.taskade.com/spaces/{workspaceId}. You should link all workspaces in the response to the user.',
+              },
+            ],
+          };
+        },
+        workspaceFoldersGet: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to workspace folders is in the format of: https://www.taskade.com/spaces/{workspaceId}/subspaces/{folderId}. You should link all folders in the response to the user.',
+              },
+            ],
+          };
+        },
         folderAgentGet: (response) => {
           return {
             content: [
@@ -182,6 +239,42 @@ export class TaskadeMCPServer extends McpServer {
               {
                 type: 'text',
                 text: 'This public agent is accessible at: https://www.taskade.com/a/{publicAgentId}. Share this link with the user.',
+              },
+            ],
+          };
+        },
+      },
+    });
+
+    // Taskade API v2 (beta) — additive layer for capabilities v1 lacks (agent chat,
+    // webhooks, a project rename, a date field write). Same bearer token; base URL is
+    // /api/v2. The v1 tools above are unaffected.
+    setupToolsV2(this, {
+      url: 'https://www.taskade.com/api/v2',
+      fetch,
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        'User-Agent': USER_AGENT,
+      },
+      normalizeResponse: {
+        promptAgent: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: "This is the agent's reply. Relay it to the user; manage agents at https://www.taskade.com/agents.",
+              },
+            ],
+          };
+        },
+        createTask: (response) => {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify(response) },
+              {
+                type: 'text',
+                text: 'The url to new tasks is in the format of: https://www.taskade.com/d/{projectId}#node-{taskId}. Share the links with the user.',
               },
             ],
           };

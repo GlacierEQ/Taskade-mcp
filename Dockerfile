@@ -1,10 +1,10 @@
-FROM node:20-slim
+FROM node:24.22.1-slim
 
 LABEL maintainer="Taskade <support@taskade.com>"
-LABEL description="Taskade MCP Server — 62+ AI tools for project management via Model Context Protocol"
+LABEL description="Taskade MCP Server — AI tools for projects, tasks, agents, and webhooks via Model Context Protocol"
 LABEL org.opencontainers.image.source="https://github.com/taskade/mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 
-RUN npm install -g @taskade/mcp-server
+RUN npm install -g @taskade/mcp-server@0.2.1
 
 ENTRYPOINT ["taskade-mcp-server"]

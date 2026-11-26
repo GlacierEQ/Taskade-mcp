@@ -2,17 +2,60 @@
 
 ## Reporting a Vulnerability
 
-Do not disclose security vulnerabilities publicly. Email [hello@taskade.com](mailto:hello@taskade.com) with details.
+**Please report security issues privately — do not open a public issue or PR.**
+
+- Preferred: open a [GitHub private security advisory](https://github.com/taskade/mcp/security/advisories/new) (Security → Report a vulnerability).
+- Or email [support@taskade.com](mailto:support@taskade.com) with details and reproduction steps.
+
+We are a small team and do not guarantee a response time. Reports go to a monitored
+mailbox and are routed to engineering, and complex reports take longer to triage. We
+aim for 90-day coordinated disclosure when feasible, subject to investigation
+requirements, so please give us a reasonable window to ship a fix before going public.
+On request we credit you by name once a fix ships. We do not run a bug bounty program
+and do not pay for vulnerability reports.
+
+The full policy is published at [taskade.com/security](https://www.taskade.com/security),
+and it is the one that applies if it and this file ever disagree.
 
 ## Token Handling
 
-- Store API tokens in environment variables only — never hardcode in source files.
+- Store API tokens in environment variables only — never hardcode them in source files.
 - `.env` files are gitignored — never commit tokens to version control.
 - Rotate tokens immediately if compromised.
 - Generate tokens at [taskade.com/settings/api](https://www.taskade.com/settings/api).
 
 ## Transport Security
 
-- Use HTTPS/TLS for HTTP/SSE mode in production.
-- Tokens passed via query parameters in HTTP mode may be logged by proxies or web servers.
-- The stdio transport (default for Claude Desktop / Cursor) does not expose tokens over the network.
+- The published `@taskade/mcp-server` package runs over **stdio** only. It reads the token from the `TASKADE_API_KEY` environment variable and does not expose the token over the network.
+- The HTTP/SSE mode exists only in the source dev script (`yarn start:server` in `packages/server`). It is for local development, and the npm package does not contain it.
+- The dev script reads the token from the `access_token` URL query parameter. A proxy or server can log that URL, and the script serves plain HTTP, so a network observer can read the token. The script listens on every network interface, on port 3000 by default (set `PORT` to change the port). Run it only on a machine and network that you trust. If other machines can reach it, put it behind HTTPS/TLS.
+- For remote use, connect to the hosted server at `https://www.taskade.com/mcp`. It uses OAuth 2.0, so you do not put a token in a URL. See [Taskade MCP server: quick start](https://github.com/taskade/mcp#taskade-mcp-server-quick-start).
+
+## Never Commit Secrets
+
+This is a public repository. Never commit:
+
+```
+.env, .env.*            # environment files
+*.key, *.pem            # private keys / certificates
+*credentials*, *secret* # credential dumps
+.mcpregistry_*          # MCP registry auth tokens
+```
+
+`.env*` files (except `.env.example`) and `.mcpregistry_*` are gitignored and excluded from the npm package; the key/credential patterns above are **not** auto-ignored, so sanity-check your staged changes before committing:
+
+```bash
+git diff --cached | grep -iE "(token|key|secret|password|credential)" | grep -v placeholder
+```
+
+If you accidentally commit a secret: **do not push** (or if already pushed, rotate the
+credential immediately), then remove it from history and notify a maintainer. See
+[GitHub: removing sensitive data](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
+
+## Privacy
+
+Taskade's data practices are described in the [Taskade Privacy Policy](https://www.taskade.com/privacy).
+The MCP server sends requests only to the Taskade public API (`https://www.taskade.com/api/v1` and `https://www.taskade.com/api/v2`)
+using the token you provide; it does not send your data to other third-party services. (In
+HTTP/SSE mode the token travels in the request URL, where a proxy or server can log it and a
+network observer can read it. Only the source dev script has that mode. The published package uses stdio.)

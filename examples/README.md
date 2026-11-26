@@ -4,13 +4,13 @@ Ready-to-use templates for connecting Taskade MCP Server to popular AI and autom
 
 ## n8n
 
-Import [`n8n-taskade-mcp-workflow.json`](./n8n-taskade-mcp-workflow.json) into n8n to create an AI agent with access to all 62+ Taskade tools.
+Import [`n8n-taskade-mcp-workflow.json`](./n8n-taskade-mcp-workflow.json) into n8n to create an AI agent with access to all 66 Taskade tools.
 
 ### Prerequisites
 
 1. Install the [n8n MCP Client](https://www.npmjs.com/package/n8n-nodes-mcp) community node
 2. Set `N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true` in your n8n environment
-3. Get your Taskade API key from [Settings > API](https://taskade.com)
+3. Create a Taskade personal access token in [Settings > API](https://www.taskade.com/settings/api)
 
 ### Setup
 
@@ -29,15 +29,9 @@ Ask the AI agent natural language questions like:
 - "What tasks are overdue?"
 - "Create an AI agent that monitors project deadlines"
 
-### Alternative: HTTP/SSE mode
-
-If you prefer to run the MCP server as a standalone HTTP service:
-
-```bash
-PORT=3001 npx @taskade/mcp-server --http --token YOUR_TASKADE_API_KEY
-```
-
-Then configure the n8n MCP node to use **HTTP Streamable** transport with URL `http://localhost:3001/mcp`.
+> **Note:** The published `@taskade/mcp-server` CLI runs over **stdio** only. Configure the n8n MCP Client node with the command `npx -y @taskade/mcp-server` and a `TASKADE_API_KEY` environment variable. The published CLI does **not** support the `--http` and `--token` flags.
+>
+> To connect over HTTP, use the hosted server at `https://www.taskade.com/mcp` (Streamable HTTP, OAuth 2.0). It needs a paid plan on the workspace. A client that cannot do OAuth can send a Taskade API token as a Bearer token. See [Taskade MCP server: quick start](../README.md#taskade-mcp-server-quick-start).
 
 ## More examples coming soon
 

@@ -1,71 +1,27 @@
-# Taskade MCP Server
+# Taskade MCP Server — Workspace MCP (`@taskade/mcp-server`)
 
-MCP server for Taskade's public API
+The **Workspace MCP** server connects an MCP client that runs local stdio servers (Claude Desktop, Claude Code, Cursor, VS Code, Windsurf) to your Taskade workspace. Its tools read and write your projects, tasks, AI agents, media and custom fields through the Taskade public API.
 
-## Install
+Most people need the hosted server instead: `https://www.taskade.com/mcp`. It needs no install, signs in with OAuth, and can edit Taskade Genesis app source. See [Hosted server or local package](https://github.com/taskade/mcp#hosted-server-or-local-package).
 
-Add the taskade mcp server to your client (ie: Cursor):
+> 📖 **Full documentation lives in the canonical sources — this package README is intentionally a stub to avoid drift.**
 
+- **Setup for each client and the tool reference:** [taskade/mcp README](https://github.com/taskade/mcp#local-package-stdio)
+- **Workspace MCP guide:** [taskade.com/docs/mcp/workspace-mcp](https://www.taskade.com/docs/mcp/workspace-mcp)
+- **Which Taskade MCP do I want?** [taskade.com/docs/mcp/which-mcp](https://www.taskade.com/docs/mcp/which-mcp)
 
-```json
-{
-  "mcpServers": {
-      "taskade": {
-          "command": "npx",
-          "args": [
-              "-y", "@taskade/mcp-server"
-          ],
-          "env": {
-              "TASKADE_API_KEY": "INSERT_YOUR_TASKADE_PERSONAL_ACCESS_TOKEN_HERE"
-          }
-      }
-  }
-}
+## Quick start
+
+```sh
+TASKADE_API_KEY="your-api-key-here" npx -y @taskade/mcp-server
 ```
 
-> You will need a valid Taskade personal access token, generate one [here](https://www.taskade.com/settings/password)
+You need Node.js 18 or later and a Taskade personal access token. Create the token at [https://www.taskade.com/settings/api](https://www.taskade.com/settings/api).
 
+To list the tools and call them, run the package in the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
-
-## Test locally
-
-- Clone this repo: `git clone git@github.com:taskade/mcp.git`
-- Install dependencies: `yarn install`
-- Build: `yarn build`
-- Install server on your MCP client.
-
-For example, to install the server on Claude, edit your `claude_desktop_config.json`:
-
-```json
-{
-    "mcpServers": {
-        "taskade": {
-            "command": "node",
-            "args": [
-                "/path/to/taskade-mcp-repo"
-            ],
-            "env": {
-                "TASKADE_API_KEY": "INSERT_YOUR_TASKADE_PERSONAL_ACCESS_TOKEN_HERE"
-            }
-        }
-    }
-}
+```sh
+npx @modelcontextprotocol/inspector -e TASKADE_API_KEY=your-api-key-here -- npx -y @taskade/mcp-server
 ```
-> You will need a valid Taskade personal access token, generate one [here](https://www.taskade.com/settings/password)
 
-### Connect Via SSE/Streamable HTTP
-
-For clients that support connecting MCP servers via SSE/Streamable HTTP (ie: Cursor):
-
-1. Run the local server: `yarn start:server`
-2. Add the SSE endpoint in your client config (ie: `~/.cursor/mcp.json`):
-
-```json
-{
-    "mcpServers": {
-        "taskade": {
-            "url": "http://localhost:3000/sse?access_token=INSERT_YOUR_TASKADE_PERSONAL_ACCESS_TOKEN_HERE"
-        }
-    }
-}
-```
+This package runs over stdio only. For a client that connects over HTTP, use the hosted server at `https://www.taskade.com/mcp`.

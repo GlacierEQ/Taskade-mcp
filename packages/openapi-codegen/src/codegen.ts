@@ -1,18 +1,40 @@
 import fs from 'fs';
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { OpenAPIV2, OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
-import path from 'path';
 import prettier from 'prettier';
+import { fileURLToPath } from 'url';
 
-import { ParsedTool, parseOpenApi } from './parser';
+import { ParsedTool, parseOpenApi } from './parser.js';
 
 type IsActionsEnabledOpt = Array<string> | ((actionName: string) => boolean);
 
 type ActionConfig = Partial<{
   title: string;
   description: string;
+  /**
+   * Descriptions for the top-level input parameters, keyed by parameter name. The
+   * codegen uses one only for a parameter that has no description in the spec, so a
+   * spec description always wins. A name that the tool does not have is ignored.
+   */
+  parameterDescriptions: Record<string, string>;
   normalizer: (args: any) => any;
+  /**
+   * Explicit MCP annotation overrides. When set, they beat the values derived
+   * from the HTTP method (e.g. a POST action that is actually idempotent can
+   * set `idempotentHint: true`).
+   */
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
 }>;
+
+const ANNOTATION_HINT_KEYS = [
+  'readOnlyHint',
+  'destructiveHint',
+  'idempotentHint',
+  'openWorldHint',
+] as const;
 
 const isActionsEnabled = (isActionsEnabledOpt: IsActionsEnabledOpt, actionName: string) => {
   if (typeof isActionsEnabledOpt === 'function') {
@@ -21,13 +43,23 @@ const isActionsEnabled = (isActionsEnabledOpt: IsActionsEnabledOpt, actionName: 
   return isActionsEnabledOpt.includes(actionName);
 };
 
-const generateToolInputFromParsedTool = (tool: ParsedTool) => {
+const generateToolInputFromParsedTool = (
+  tool: ParsedTool,
+  parameterDescriptions: Record<string, string> = {},
+) => {
   const mergedSchema = JSON.parse(JSON.stringify(tool.inputSchema));
   mergedSchema.properties = {
     ...mergedSchema.properties,
     ...tool.pathParamsSchema?.properties,
     ...tool.queryParamsSchema?.properties,
   };
+
+  for (const [name, description] of Object.entries(parameterDescriptions)) {
+    const property = mergedSchema.properties[name];
+    if (property && typeof property === 'object' && !property.description) {
+      mergedSchema.properties[name] = { ...property, description };
+    }
+  }
   mergedSchema.required = [
     ...mergedSchema.required,
     ...(tool.pathParamsSchema?.required ?? []),
@@ -42,14 +74,26 @@ type CodegenOpts = {
   document: OpenAPIV3_1.Document | OpenAPIV3.Document | OpenAPIV2.Document;
   isActionsEnabled?: IsActionsEnabledOpt;
   actions?: Record<string, ActionConfig>;
+  /**
+   * Name of the generated setup function. Defaults to `setupTools`. Override it
+   * (e.g. `setupToolsV2`) so a second generated tool set can be imported alongside
+   * the first without an export-name collision.
+   */
+  exportName?: string;
 };
 
 export const codegen = async (opts: CodegenOpts) => {
   const { document, path: outputPath } = opts;
+  const exportName = opts.exportName ?? 'setupTools';
 
   const tools = parseOpenApi(document.paths ?? {});
 
-  const runtime = fs.readFileSync(path.join(import.meta.dirname, 'runtime.ts'), 'utf8');
+  // The generated file inlines the runtime as TypeScript source. This module runs from
+  // src/ in the tests and from dist/ after a build. Both resolve ../src/runtime.ts.
+  const runtime = fs.readFileSync(
+    fileURLToPath(new URL('../src/runtime.ts', import.meta.url)),
+    'utf8',
+  );
 
   let output: string = `
     /**
@@ -62,7 +106,7 @@ export const codegen = async (opts: CodegenOpts) => {
 
       ${runtime}\n
 
-      export const setupTools = (server: McpServer, opts: OpenAPIToolRuntimeConfigOpts) => {
+      export const ${exportName} = (server: McpServer, opts: OpenAPIToolRuntimeConfigOpts) => {
 
       const config = new OpenAPIToolRuntimeConfig(opts);
 
@@ -73,22 +117,45 @@ export const codegen = async (opts: CodegenOpts) => {
       return;
     }
 
-    const annotations: Record<string, any> = {};
+    // Derive MCP tool annotations from the HTTP method: GET/HEAD are read-only,
+    // DELETE is destructive, GET/HEAD/PUT/DELETE are idempotent per HTTP
+    // semantics (POST is not). openWorldHint is always false: this server only
+    // talks to the Taskade API — a closed world. A human-friendly title and
+    // explicit hint overrides can be supplied via opts.actions.
+    const method = tool.method.toUpperCase();
+    const annotations: Record<string, any> = {
+      readOnlyHint: method === 'GET' || method === 'HEAD',
+      destructiveHint: method === 'DELETE',
+      idempotentHint: ['GET', 'HEAD', 'PUT', 'DELETE'].includes(method),
+      openWorldHint: false,
+    };
 
-    if (opts.actions?.[tool.name]) {
-      annotations.title = opts.actions[tool.name].title;
-      annotations.description = opts.actions[tool.name].description;
+    const actionConfig = opts.actions?.[tool.name];
+
+    // Explicit per-action overrides beat derived values. Undefined-checked so
+    // an explicit `false` override wins too.
+    for (const hint of ANNOTATION_HINT_KEYS) {
+      const override = actionConfig?.[hint];
+      if (override !== undefined) {
+        annotations[hint] = override;
+      }
     }
+
+    const actionTitle = actionConfig?.title;
+    if (actionTitle) {
+      annotations.title = actionTitle;
+    }
+
+    const description = actionConfig?.description ?? tool.description;
 
     const toolArgs = [
       `"${tool.name}"`,
-      `"${tool.description}"`,
-      generateToolInputFromParsedTool(tool),
+      JSON.stringify(description),
+      generateToolInputFromParsedTool(tool, actionConfig?.parameterDescriptions),
     ];
 
-    if (Object.keys(annotations).length > 0) {
-      toolArgs.push(JSON.stringify(annotations));
-    }
+    // annotations always carry the derived hint set, so always include them
+    toolArgs.push(JSON.stringify(annotations));
 
     toolArgs.push(`async (args) => {
             return await config.executeToolCall({
@@ -113,7 +180,14 @@ export const codegen = async (opts: CodegenOpts) => {
               });
         }`);
 
-    output += `server.tool(${toolArgs.join(',')});\n`;
+    // `title` is a top-level field of a tool definition in the MCP specification
+    // (2025-06-18 and later). The deprecated `server.tool()` has no title argument, so
+    // `update()` sets it. The title stays in the annotations too, for clients that read
+    // `annotations.title`. This form does not use `registerTool`, because its types
+    // fail with TS2589 ("excessively deep") on a zod 3 shape.
+    const titleUpdate = actionTitle ? `.update({ title: ${JSON.stringify(actionTitle)} })` : '';
+
+    output += `server.tool(${toolArgs.join(',')})${titleUpdate};\n`;
   });
 
   output += `

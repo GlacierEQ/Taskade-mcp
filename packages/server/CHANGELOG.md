@@ -1,5 +1,80 @@
 # @taskade/mcp-server
 
+## 0.2.1
+
+### Patch Changes
+
+- [#141](https://github.com/taskade/mcp/pull/141) [`dde7275`](https://github.com/taskade/mcp/commit/dde7275bb6f8187b610583c34b4aa92b0795d20f) Thanks [@johnxie](https://github.com/johnxie)! - Send the description of each OpenAPI parameter and a top-level `title` for each tool.
+
+  - The codegen now copies the `description` of an OpenAPI Parameter Object into the tool input schema. Before, it read only the parameter `schema` and dropped the description.
+  - The generated code now calls `.update({ title })` on the tool that `server.tool()` returns, so `tools/list` returns the action title as a top-level `title`, as the MCP specification defines it. The title stays in `annotations.title` too. The generated code needs `@modelcontextprotocol/sdk` 1.13.0 or later.
+  - A new action option, `parameterDescriptions`, describes the parameters that the spec does not describe. A spec description always wins.
+  - The server describes its id, page and limit parameters, and pins the version of `@taskade/mcp-server` in the Dockerfile. `yarn changeset:version` updates the pin for each release.
+
+  No tool name, tool description, input type or required list changes.
+
+## 0.2.0
+
+### Minor Changes
+
+- [#130](https://github.com/taskade/mcp/pull/130) [`fae1a6d`](https://github.com/taskade/mcp/commit/fae1a6d1ce9b674e9a1fb4ce1e2ba7e8e08a5be4) Thanks [@johnxie](https://github.com/johnxie)! - Add four tools from the Taskade API v2: `listTasks`, `createTask`, `setTaskFieldValue` and `renameProject`. The package now serves 66 tools (57 v1 and 9 v2). `setTaskFieldValue` writes text, number, Select and date fields. The v1 `taskFieldValuePut` takes no date. `renameProject` has no v1 tool. Every v1 tool name stays. The v2 snapshot comes from the live spec of 2026-11-13. With it, `getConversation` takes an optional `includeTranscript`, and the descriptions of `subscribeWebhook` and `unsubscribeWebhook` carry the deprecation note of the API.
+
+## 0.1.4
+
+### Patch Changes
+
+- [#107](https://github.com/taskade/mcp/pull/107) [`e52857e`](https://github.com/taskade/mcp/commit/e52857e64f132dd84f86b9f00a4a9c769a8bf58e) Thanks [@johnxie](https://github.com/johnxie)! - Bundle `@modelcontextprotocol/sdk` 1.32.1 (was 1.12.1) with one copy of zod (3.25.28). The server accepts MCP protocol versions up to `2025-11-25`. A tool call with invalid arguments, or with an unknown tool name, now returns a tool result with `isError: true` instead of a JSON-RPC error, so the model can read the message and correct the call. The tool names and their order do not change. The `initialize` response no longer echoes an unused `capabilities` object inside `serverInfo`.
+
+- [#101](https://github.com/taskade/mcp/pull/101) [`2b38849`](https://github.com/taskade/mcp/commit/2b38849ed52ead83c8fffd296f257d60847c4da7) Thanks [@johnxie](https://github.com/johnxie)! - Send `User-Agent: taskade-mcp-server/<version>` on every Taskade API request, v1 and v2. The server identifies itself, so the Taskade team can measure the usage of this package and debug its requests. The header holds no user data. Requests used the generic `node-fetch` value before.
+
+## 0.1.3
+
+### Patch Changes
+
+- [#96](https://github.com/taskade/mcp/pull/96) [`de335b7`](https://github.com/taskade/mcp/commit/de335b76df3e110f30827196aea7fb4441edf893) Thanks [@johnxie](https://github.com/johnxie)! - Install no runtime dependencies. `bin/cli.mjs` already bundles the MCP SDK, `node-fetch` and `zod`, so these packages and `mcp-proxy` move to `devDependencies`. `npx @taskade/mcp-server` now installs 1 package instead of 120. The README no longer documents a `--http` mode, because the package runs over stdio only.
+
+- [#93](https://github.com/taskade/mcp/pull/93) [`f57337c`](https://github.com/taskade/mcp/commit/f57337c6caa08f9b60215a86339eefd2c3c8a888) Thanks [@johnxie](https://github.com/johnxie)! - Correct the MCP tool hints: the v2 conversation reads are read-only, `unsubscribeWebhook` and the PUT/PATCH tools that replace a value are destructive, and `promptAgent` is destructive and open-world. Claude now runs the reads without a confirmation and asks before the overwrites.
+
+## 0.1.2
+
+### Patch Changes
+
+- [#68](https://github.com/taskade/mcp/pull/68) [`cd2a4d7`](https://github.com/taskade/mcp/commit/cd2a4d76aba68a426581ab96ee95db5f68b4aee6) Thanks [@johnxie](https://github.com/johnxie)! - MCP clients now see the real package version (was hardcoded 0.0.3). Releasing also publishes the canonical package README stub (#64) and corrected API-token link (#61) to npm.
+
+- [#66](https://github.com/taskade/mcp/pull/66) [`4294c28`](https://github.com/taskade/mcp/commit/4294c288a771730ae284c6f7a89dd73ab5420969) Thanks [@johnxie](https://github.com/johnxie)! - Task and workspace tool results now include canonical Taskade URL hints (task node deep links, space and subspace URLs).
+
+- [#69](https://github.com/taskade/mcp/pull/69) [`0ea4b4a`](https://github.com/taskade/mcp/commit/0ea4b4a41cd60724e25743b3b9fbd0982bed36dc) Thanks [@johnxie](https://github.com/johnxie)! - Generated tools now carry the full MCP annotation set: derived idempotentHint and openWorldHint:false alongside readOnly/destructive hints; per-action overrides supported.
+
+## 0.1.1
+
+### Patch Changes
+
+- [#58](https://github.com/taskade/mcp/pull/58) [`34e978d`](https://github.com/taskade/mcp/commit/34e978d198da792a7bee98ab53938f16662ed0c4) Thanks [@johnxie](https://github.com/johnxie)! - Surface API errors instead of returning them as successful tool results. The runtime now
+  checks `response.ok`: a non-2xx response (401/403/422/5xx) or a network failure comes back
+  as an `isError` tool result carrying the status and body, rather than the error payload
+  being handed to the model as if the call had succeeded. Applies to all generated tools
+  (v1 + v2); the 2xx path and the `normalizeResponse` handlers are unchanged.
+
+## 0.1.0
+
+### Minor Changes
+
+- [#55](https://github.com/taskade/mcp/pull/55) [`f4c9cf5`](https://github.com/taskade/mcp/commit/f4c9cf55c269d5fd5cc1c2d42317e5c84816af95) Thanks [@johnxie](https://github.com/johnxie)! - Add a Taskade API **v2** tool layer alongside the existing v1 tools (additive — v1's
+  57 tools are unchanged). Exposes the highest-value capabilities v1 lacks: **agent chat**
+  (`promptAgent`, `listConversations`, `getConversation`) and **webhooks**
+  (`subscribeWebhook`, `unsubscribeWebhook`). The codegen gains an `exportName` option so
+  the second tool set (`setupToolsV2`) can be registered next to the first. v2 is beta;
+  the enabled set will grow as it stabilizes.
+
+## 0.0.4
+
+### Patch Changes
+
+- [#44](https://github.com/taskade/mcp/pull/44) [`ff6a9da`](https://github.com/taskade/mcp/commit/ff6a9da911f0879557c74ee594e9f1d9a1d94067) Thanks [@johnxie](https://github.com/johnxie)! - Add MCP tool annotations to every generated tool: a human-friendly `title`
+  (from the humanized action map) plus `readOnlyHint`/`destructiveHint` derived
+  from each operation's HTTP method (GET/HEAD → read-only, DELETE → destructive).
+  Improves client UX/safety display and is a prerequisite for connector directories.
+
 ## 0.0.3
 
 ### Patch Changes
